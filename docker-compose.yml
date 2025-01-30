@@ -1,0 +1,31 @@
+name: aoai-audio-generation
+
+services:
+  web:
+    build: .
+    ports:
+      - "${PORT:-5001}:5001"
+    env_file:
+      - keys.env
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/aoai_audio
+    volumes:
+      - ./history:/app/history
+    depends_on:
+      - db
+    restart: unless-stopped
+
+  db:
+    image: postgres:15
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=aoai_audio
+    ports:
+      - "5432:5432"
+    restart: unless-stopped
+
+volumes:
+  postgres_data: 

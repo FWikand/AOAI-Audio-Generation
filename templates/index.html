@@ -1,0 +1,787 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Audio from Files - Powered by Azure OpenAI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+            background: white;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        .background-animation {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: -1;
+            overflow: hidden;
+        }
+
+        .ball {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(40px);
+            opacity: 0.4;
+            animation: floatAround 20s linear infinite;
+        }
+
+        .ball:nth-child(1) {
+            width: 400px;
+            height: 400px;
+            background: #667eea;
+            left: 0%;
+            top: 10%;
+            animation-delay: 0s;
+        }
+
+        .ball:nth-child(2) {
+            width: 500px;
+            height: 500px;
+            background: #764ba2;
+            right: -10%;
+            bottom: 0%;
+            animation-delay: -5s;
+        }
+
+        .ball:nth-child(3) {
+            width: 350px;
+            height: 350px;
+            background: #6B8DD6;
+            left: -10%;
+            bottom: 20%;
+            animation-delay: -10s;
+        }
+
+        .ball:nth-child(4) {
+            width: 450px;
+            height: 450px;
+            background: #8E37D7;
+            right: 10%;
+            top: -10%;
+            animation-delay: -15s;
+        }
+
+        @keyframes floatAround {
+            0% {
+                transform: translate(0, 0) rotate(0deg);
+            }
+            25% {
+                transform: translate(15%, 15%) rotate(90deg);
+            }
+            50% {
+                transform: translate(0, 25%) rotate(180deg);
+            }
+            75% {
+                transform: translate(-15%, 15%) rotate(270deg);
+            }
+            100% {
+                transform: translate(0, 0) rotate(360deg);
+            }
+        }
+
+        .glass-card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+        }
+        .glass-input {
+            background: rgba(255, 255, 255, 0.8);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            backdrop-filter: blur(5px);
+            color: #1a202c;
+        }
+        .glass-input::placeholder {
+            color: rgba(0, 0, 0, 0.5);
+        }
+        .glass-input option {
+            background: white;
+            color: #1a202c;
+        }
+        .custom-scrollbar {
+            scrollbar-width: thin;
+            scrollbar-color: rgba(0, 0, 0, 0.3) transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background-color: rgba(0, 0, 0, 0.3);
+            border-radius: 3px;
+        }
+        .audio-player {
+            background: rgba(255, 255, 255, 0.8);
+            border-radius: 8px;
+            padding: 10px;
+        }
+        .audio-player::-webkit-media-controls-panel {
+            background: rgba(255, 255, 255, 0.8);
+        }
+        .audio-player::-webkit-media-controls-current-time-display,
+        .audio-player::-webkit-media-controls-time-remaining-display {
+            color: #1a202c;
+        }
+    </style>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const goalSelect = document.getElementById('goal');
+            const customGoalContainer = document.getElementById('custom-goal-container');
+            const toneContainer = document.getElementById('tone-container');
+            const podcastVoicesContainer = document.getElementById('podcast-voices-container');
+            const singleVoiceContainer = document.getElementById('single-voice-container');
+
+            goalSelect.addEventListener('change', function() {
+                const isPodcast = this.value === 'podcast';
+                const isCustom = this.value === 'custom';
+                
+                // Show/hide custom goal input
+                customGoalContainer.classList.toggle('hidden', !isCustom);
+                
+                // Show/hide tone selection
+                toneContainer.classList.toggle('hidden', isPodcast);
+                
+                // Show/hide voice selections
+                podcastVoicesContainer.classList.toggle('hidden', !isPodcast);
+                singleVoiceContainer.classList.toggle('hidden', isPodcast);
+            });
+        });
+    </script>
+</head>
+<body class="p-4 md:p-8">
+    <div class="background-animation">
+        <div class="ball"></div>
+        <div class="ball"></div>
+        <div class="ball"></div>
+        <div class="ball"></div>
+    </div>
+    <div class="container mx-auto" style="max-width: 100rem;">
+        <h1 class="text-4xl font-bold text-center text-gray-800 mb-12 tracking-tight">Create Audio from Files<br><span class="text-2xl font-medium opacity-90">Powered by Azure OpenAI</span></h1>
+        
+        <div class="grid grid-cols-1 lg:grid-cols-[1fr,2fr,1fr] gap-8">
+            <!-- Left Column: Input Options -->
+            <div class="glass-card rounded-2xl p-8 text-gray-900 h-fit">
+                <div class="space-y-6">
+                    <div>
+                        <label class="block text-sm font-medium mb-2">
+                            Processing Goal
+                            <div class="inline-block relative ml-2 group">
+                                <svg class="w-4 h-4 text-gray-500 hover:text-gray-700 relative" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                                </svg>
+                                <div class="absolute left-0 top-6 hidden group-hover:block w-80 p-4 bg-[#1a1f2d]/95 text-white text-sm rounded-lg shadow-2xl z-[9999] backdrop-blur-md border border-gray-700/20">
+                                    <div class="relative">
+                                        <div class="absolute -top-2 left-2 transform rotate-45 w-2 h-2 bg-[#1a1f2d]/95"></div>
+                                        <div class="space-y-3">
+                                            <div class="pb-2 border-b border-gray-700/50">
+                                                <p><strong class="text-indigo-400">General Summary</strong><br>Creates a comprehensive overview of the main points and key takeaways from your document.</p>
+                                            </div>
+                                            <div class="pb-2 border-b border-gray-700/50">
+                                                <p><strong class="text-indigo-400">Key Insights</strong><br>Focuses on extracting the most important findings, insights, and their potential impact.</p>
+                                            </div>
+                                            <div class="pb-2 border-b border-gray-700/50">
+                                                <p><strong class="text-indigo-400">Action Items</strong><br>Identifies specific tasks, next steps, and actionable recommendations with priorities.</p>
+                                            </div>
+                                            <div class="pb-2 border-b border-gray-700/50">
+                                                <p><strong class="text-indigo-400">Topic Analysis</strong><br>Provides in-depth analysis of specific themes and subjects within the document.</p>
+                                            </div>
+                                            <div class="pb-2 border-b border-gray-700/50">
+                                                <p><strong class="text-indigo-400">Recommendations</strong><br>Emphasizes suggestions and proposed solutions with detailed implementation steps.</p>
+                                            </div>
+                                            <div>
+                                                <p><strong class="text-indigo-400">Custom Goal</strong><br>Define your own specific goal or focus area. Perfect for unique requirements or specialized analysis needs.</p>
+                                            </div>
+                                            <div>
+                                                <p><strong class="text-indigo-400">Podcast</strong><br>Creates an engaging conversation between two voices, where one asks questions and the other provides detailed answers about the document.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </label>
+                        <select id="goal" class="glass-input w-full p-3 rounded-lg">
+                            <option value="general_summary" selected>General Summary</option>
+                            <option value="key_insights">Key Insights</option>
+                            <option value="action_items">Action Items</option>
+                            <option value="topic_analysis">Topic Analysis</option>
+                            <option value="recommendations">Recommendations</option>
+                            <option value="custom">Custom Goal</option>
+                            <option value="podcast">Podcast</option>
+                        </select>
+                    </div>
+
+                    <div id="custom-goal-container" class="hidden">
+                        <label class="block text-sm font-medium mb-2">
+                            Custom Goal Instructions
+                        </label>
+                        <textarea id="goal_instruction" class="glass-input w-full p-3 rounded-lg" rows="4" placeholder="Describe what you want to extract from the document..."></textarea>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Summary Length</label>
+                        <select id="summary_length" class="glass-input w-full p-3 rounded-lg">
+                            <option value="1">1 Minute</option>
+                            <option value="2" selected>2 Minutes</option>
+                            <option value="3">3 Minutes</option>
+                            <option value="4">4 Minutes</option>
+                            <option value="5">5 Minutes</option>
+                        </select>
+                    </div>
+
+                    <div id="tone-container">
+                        <label class="block text-sm font-medium mb-2">Tone of Voice</label>
+                        <select id="tone" class="glass-input w-full p-3 rounded-lg">
+                            <option value="professional">Professional</option>
+                            <option value="conversational" selected>Conversational</option>
+                            <option value="enthusiastic">Enthusiastic</option>
+                            <option value="formal">Formal</option>
+                            <option value="casual">Casual</option>
+                            <option value="empathetic">Empathetic</option>
+                        </select>
+                    </div>
+
+                    <div id="podcast-voices-container" class="hidden space-y-4">
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Voice Style 1 (Interviewer)</label>
+                            <select id="voice1_style" class="glass-input w-full p-3 rounded-lg">
+                                <option value="contemplating_british">Contemplating British Accent</option>
+                                <option value="curious_american">Curious American Accent</option>
+                                <option value="energetic_host">Energetic Radio Host</option>
+                                <option value="thoughtful_journalist">Thoughtful Journalist</option>
+                                <option value="friendly_interviewer">Friendly Talk Show Host</option>
+                                <option value="pirate_interviewer">Pirate Captain Host</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium mb-2">Voice Style 2 (Expert)</label>
+                            <select id="voice2_style" class="glass-input w-full p-3 rounded-lg">
+                                <option value="authoritative_professor">Authoritative Professor</option>
+                                <option value="passionate_expert">Passionate Subject Expert</option>
+                                <option value="analytical_researcher">Analytical Researcher</option>
+                                <option value="experienced_practitioner">Experienced Practitioner</option>
+                                <option value="industry_veteran">Industry Veteran</option>
+                                <option value="vampire_expert">Ancient Vampire Scholar</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Voice Selection</label>
+                        <select id="voice" class="glass-input w-full p-3 rounded-lg">
+                            <option value="alloy">Alloy - Neutral and balanced</option>
+                            <option value="echo">Echo - Warm and mature</option>
+                            <option value="fable">Fable - British and proper</option>
+                            <option value="onyx">Onyx - Deep and authoritative</option>
+                            <option value="nova">Nova - Professional and clear</option>
+                            <option value="shimmer">Shimmer - Bright and energetic</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Language</label>
+                        <select id="language" class="glass-input w-full p-3 rounded-lg">
+                            <option value="english" selected> 🇬🇧 English</option>
+                            <option value="spanish">🇪🇸 Spanish (Español)</option>
+                            <option value="french">🇫🇷 French (Français)</option>
+                            <option value="german">🇩🇪 German (Deutsch)</option>
+                            <option value="italian">🇮🇹 Italian (Italiano)</option>
+                            <option value="portuguese">🇵🇹 Portuguese (Português)</option>
+                            <option value="dutch">🇳🇱 Dutch (Nederlands)</option>
+                            <option value="polish">🇵🇱 Polish (Polski)</option>
+                            <option value="japanese">🇯🇵 Japanese (日本語)</option>
+                            <option value="chinese">🇨🇳 Chinese (中文)</option>
+                            <option value="korean">🇰🇷 Korean (한국어)</option>
+                            <option value="swedish">🇸🇪 Swedish (Svenska)</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium mb-2">
+                            Processing Method
+                            <div class="inline-block relative ml-2 group">
+                                <svg class="w-4 h-4 text-gray-500 hover:text-gray-700" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                                </svg>
+                                <div class="absolute left-0 top-6 hidden group-hover:block w-80 p-4 bg-[#1a1f2d]/95 text-white text-sm rounded-lg shadow-2xl z-[9999] backdrop-blur-md border border-gray-700/20">
+                                    <div class="relative">
+                                        <div class="absolute -top-2 left-2 transform rotate-45 w-2 h-2 bg-[#1a1f2d]/95"></div>
+                                        <div class="space-y-3">
+                                            <div class="pb-2 border-b border-gray-700/50">
+                                                <p><strong class="text-indigo-400">Vision Only</strong><br>Uses advanced AI vision to analyze document images directly. Best for scanned documents, PDFs with complex layouts, or when text extraction is difficult.</p>
+                                            </div>
+                                            <div>
+                                                <p><strong class="text-indigo-400">Text + Vision</strong><br>First attempts direct text extraction, then falls back to vision if needed. Faster for text-based PDFs while maintaining the ability to handle complex documents.</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </label>
+                        <div class="space-y-3">
+                            <label class="flex items-center">
+                                <input type="radio" name="processing_method" value="vision" checked class="form-radio text-indigo-500">
+                                <span class="ml-2">Vision Only</span>
+                            </label>
+                            <label class="flex items-center">
+                                <input type="radio" name="processing_method" value="hybrid" class="form-radio text-indigo-500">
+                                <span class="ml-2">Text + Vision</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm font-medium mb-2">Upload Document</label>
+                        <div class="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed rounded-lg border-gray-400 hover:border-gray-600 transition-colors">
+                            <div class="space-y-2 text-center">
+                                <svg class="mx-auto h-12 w-12 text-gray-600" stroke="currentColor" fill="none" viewBox="0 0 48 48" aria-hidden="true">
+                                    <path d="M28 8H12a4 4 0 00-4 4v20m32-12v8m0 0v8a4 4 0 01-4 4H12a4 4 0 01-4-4v-4m32-4l-3.172-3.172a4 4 0 00-5.656 0L28 28M8 32l9.172-9.172a4 4 0 015.656 0L28 28m0 0l4 4m4-24h8m-4-4v8m-12 4h.02" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                                </svg>
+                                <div class="flex text-sm justify-center">
+                                    <label class="relative cursor-pointer rounded-md font-medium text-indigo-600 hover:text-indigo-700 focus-within:outline-none">
+                                        <span>Upload a file</span>
+                                        <input id="file-upload" name="file-upload" type="file" class="sr-only">
+                                    </label>
+                                    <p class="pl-1 text-gray-600">or drag and drop</p>
+                                </div>
+                                <p class="text-xs text-gray-500">PDF, TXT, DOC up to 64MB</p>
+                            </div>
+                        </div>
+                        <div id="file-name" class="mt-2 text-sm text-gray-600"></div>
+                    </div>
+
+                    <button onclick="generateAudio()" class="w-full bg-gradient-to-r from-indigo-500 to-purple-500 text-white py-3 px-4 rounded-lg font-medium hover:from-indigo-600 hover:to-purple-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 focus:ring-offset-transparent transition-all duration-200">
+                        Generate Audio
+                    </button>
+                </div>
+            </div>
+
+            <!-- Middle Column: Generated Content -->
+            <div class="space-y-6">
+                <!-- Loading Indicator -->
+                <div id="loading" class="hidden glass-card rounded-2xl p-8">
+                    <div class="flex items-center justify-center space-x-3">
+                        <div class="w-3 h-3 bg-indigo-500 rounded-full animate-bounce"></div>
+                        <div class="w-3 h-3 bg-indigo-500 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+                        <div class="w-3 h-3 bg-indigo-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                    </div>
+                    <p class="text-center text-gray-600 mt-4">Processing your document...</p>
+                </div>
+
+                <!-- Results Container -->
+                <div id="results" class="space-y-6">
+                    <div class="glass-card rounded-2xl p-8">
+                        <h2 class="text-xl font-semibold mb-6 text-gray-900">Generated Audio</h2>
+                        <div id="audioPlaceholder" class="text-gray-500 italic mb-4">
+                            Your generated audio will appear here after processing.
+                        </div>
+                        <audio id="audioPlayer" controls class="w-full audio-player">
+                            Your browser does not support the audio element.
+                        </audio>
+                    </div>
+
+                    <div class="glass-card rounded-2xl p-8">
+                        <h2 class="text-xl font-semibold mb-6 text-gray-900">Generated Summary</h2>
+                        <div id="textResponse" class="prose max-w-none text-gray-900 custom-scrollbar">
+                            <div class="text-gray-500 italic">
+                                Your generated summary will appear here. Upload a document and click "Generate Audio" to begin.
+                                <div class="mt-4 space-y-2">
+                                    <div class="h-4 bg-gray-200 rounded w-3/4"></div>
+                                    <div class="h-4 bg-gray-200 rounded w-1/2"></div>
+                                    <div class="h-4 bg-gray-200 rounded w-5/6"></div>
+                                    <div class="h-4 bg-gray-200 rounded w-2/3"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Column: History -->
+            <div class="glass-card rounded-2xl p-8 text-gray-900 h-fit relative">
+                <h2 class="text-xl font-semibold mb-6 text-gray-900">History</h2>
+                <div id="historyList" class="space-y-4 max-h-[calc(70vh-80px)] overflow-y-auto custom-scrollbar mb-4">
+                    <!-- History entries will be populated here -->
+                </div>
+                <!-- Rerun button container -->
+                <div id="rerunButtonContainer" class="sticky bottom-0 left-0 right-0">
+                    <button id="rerunButton" class="w-full px-4 py-3 bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-xl text-sm font-medium hover:from-indigo-600 hover:to-purple-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                        Rerun Selected with Current Settings
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // File upload handling
+        const fileUpload = document.getElementById('file-upload');
+        const fileName = document.getElementById('file-name');
+        const dropZone = fileUpload.parentElement.parentElement.parentElement.parentElement;
+
+        fileUpload.addEventListener('change', function(e) {
+            if (e.target.files.length > 0) {
+                fileName.textContent = `Selected file: ${e.target.files[0].name}`;
+            }
+        });
+
+        // Drag and drop handling
+        dropZone.addEventListener('dragover', function(e) {
+            e.preventDefault();
+            dropZone.classList.add('border-indigo-500');
+        });
+
+        dropZone.addEventListener('dragleave', function(e) {
+            e.preventDefault();
+            dropZone.classList.remove('border-indigo-500');
+        });
+
+        dropZone.addEventListener('drop', function(e) {
+            e.preventDefault();
+            dropZone.classList.remove('border-indigo-500');
+            
+            if (e.dataTransfer.files.length > 0) {
+                fileUpload.files = e.dataTransfer.files;
+                fileName.textContent = `Selected file: ${e.dataTransfer.files[0].name}`;
+            }
+        });
+
+        // History functionality
+        let selectedEntryId = null;
+
+        async function loadHistory() {
+            try {
+                const response = await fetch('/history');
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const historyList = document.getElementById('historyList');
+                    historyList.innerHTML = '';
+                    
+                    // Create container for entries
+                    const entriesContainer = document.createElement('div');
+                    entriesContainer.className = 'space-y-3';
+                    
+                    data.entries.forEach(entry => {
+                        const entryElement = document.createElement('div');
+                        entryElement.dataset.entryId = entry.id;
+                        entryElement.className = `p-4 bg-white/50 rounded-xl cursor-pointer hover:bg-white/70 transition-all border border-gray-100 ${entry.id === selectedEntryId ? 'bg-green-100/80 border-green-400' : ''}`;
+                        
+                        // Get the base filename and count reruns
+                        const isRerun = entry.settings.processing_method === 'rerun';
+                        const baseFilename = entry.original_filename;
+                        
+                        // Count previous reruns of this file
+                        let rerunCount = 0;
+                        if (isRerun) {
+                            rerunCount = data.entries.filter(e => 
+                                e.original_filename === entry.original_filename && 
+                                e.settings.processing_method === 'rerun' &&
+                                new Date(e.timestamp) <= new Date(entry.timestamp)
+                            ).length;
+                        }
+                        
+                        entryElement.innerHTML = `
+                            <div class="flex justify-between items-start">
+                                <div class="flex-grow">
+                                    <div class="text-sm text-gray-600 mb-1">${new Date(entry.timestamp).toLocaleString()}</div>
+                                    <div class="font-medium text-gray-800 mb-2">${baseFilename}</div>
+                                    <div class="flex flex-wrap gap-2">
+                                        ${isRerun ? `<span class="px-3 py-1 rounded-full bg-purple-100 text-purple-600 text-xs font-medium">Rerun #${rerunCount}</span>` : ''}
+                                        <span class="px-3 py-1 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">${entry.settings.language}</span>
+                                        ${entry.settings.tone ? `<span class="px-3 py-1 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">${entry.settings.tone}</span>` : ''}
+                                        <span class="px-3 py-1 rounded-full bg-blue-50 text-blue-600 text-xs font-medium">${entry.settings.goal === 'custom' ? 'Custom Goal' : entry.settings.goal.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')}</span>
+                                    </div>
+                                </div>
+                                <button class="delete-btn p-2 text-gray-400 hover:text-red-500 transition-colors" data-entry-id="${entry.id}">
+                                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                                    </svg>
+                                </button>
+                            </div>
+                        `;
+
+                        // Add click handler for the delete button
+                        entryElement.querySelector('.delete-btn').onclick = async (e) => {
+                            e.stopPropagation(); // Prevent entry selection when clicking delete
+                            if (confirm('Are you sure you want to delete this entry?')) {
+                                try {
+                                    const response = await fetch(`/history/${entry.id}`, {
+                                        method: 'DELETE'
+                                    });
+                                    const data = await response.json();
+                                    if (data.status === 'success') {
+                                        // If the deleted entry was selected, clear the selection
+                                        if (selectedEntryId === entry.id) {
+                                            selectedEntryId = null;
+                                            document.getElementById('textResponse').innerHTML = '';
+                                            document.getElementById('audioPlayer').src = '';
+                                            document.getElementById('audioPlaceholder').style.display = 'block';
+                                        }
+                                        loadHistory(); // Reload the history list
+                                    } else {
+                                        alert('Error deleting entry: ' + data.message);
+                                    }
+                                } catch (error) {
+                                    alert('Error deleting entry: ' + error);
+                                }
+                            }
+                        };
+                        
+                        // Add click handler for the entry
+                        entryElement.onclick = async (e) => {
+                            e.stopPropagation();
+                            selectedEntryId = entry.id;
+                            
+                            document.querySelectorAll('#historyList [data-entry-id]').forEach(el => {
+                                if (el.dataset.entryId === selectedEntryId) {
+                                    el.classList.add('bg-green-100/80', 'border-green-400');
+                                } else {
+                                    el.classList.remove('bg-green-100/80', 'border-green-400');
+                                }
+                            });
+                            
+                            if (entry.audio_data) {
+                                const audioBlob = base64ToBlob(entry.audio_data, 'audio/wav');
+                                const audioUrl = URL.createObjectURL(audioBlob);
+                                updateAudioPlayer(audioUrl);
+                            }
+                            if (entry.summary_html) {
+                                document.getElementById('textResponse').innerHTML = entry.summary_html;
+                            }
+                            
+                            updateRerunButtonState();
+                        };
+                        
+                        // Add hover effect for the entire card
+                        entryElement.addEventListener('mouseenter', () => {
+                            entryElement.style.transform = 'translateY(-2px)';
+                        });
+                        entryElement.addEventListener('mouseleave', () => {
+                            entryElement.style.transform = 'translateY(0)';
+                        });
+                        
+                        entriesContainer.appendChild(entryElement);
+                    });
+                    
+                    // Add entries to the history list
+                    historyList.appendChild(entriesContainer);
+                    
+                    // Update rerun button state
+                    updateRerunButtonState();
+                }
+            } catch (error) {
+                console.error('Error loading history:', error);
+            }
+        }
+
+        function updateRerunButtonState() {
+            const rerunButton = document.getElementById('rerunButton');
+            if (rerunButton) {
+                rerunButton.disabled = !selectedEntryId;
+            }
+        }
+
+        async function rerunEntry(entryId, event) {
+            event.stopPropagation();
+            
+            try {
+                // Disable rerun button and update text
+                const rerunButton = document.getElementById('rerunButton');
+                rerunButton.disabled = true;
+                rerunButton.textContent = 'Processing...';
+                
+                // Get the entry details first
+                const historyResponse = await fetch('/history');
+                const historyData = await historyResponse.json();
+                const entry = historyData.entries.find(e => e.id === entryId);
+                
+                if (!entry) {
+                    throw new Error('Could not find original entry');
+                }
+                
+                // Get the extracted text
+                const response = await fetch(`/history/text/${entryId}`);
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const formData = new FormData();
+                    formData.append('rerun_text', data.text);
+                    formData.append('original_filename', entry.original_filename);
+                    
+                    // Get all current form values
+                    const goal = document.getElementById('goal').value;
+                    formData.append('goal', goal);
+                    formData.append('summary_length', document.getElementById('summary_length').value);
+                    formData.append('language', document.getElementById('language').value);
+                    formData.append('voice', document.getElementById('voice').value);
+                    
+                    // Handle goal-specific fields
+                    if (goal === 'podcast') {
+                        formData.append('voice1_style', document.getElementById('voice1_style').value);
+                        formData.append('voice2_style', document.getElementById('voice2_style').value);
+                    } else {
+                        formData.append('tone', document.getElementById('tone').value);
+                    }
+                    
+                    if (goal === 'custom') {
+                        formData.append('goal_instruction', document.getElementById('goal_instruction').value);
+                    }
+                    
+                    // Show loading indicator
+                    document.getElementById('loading').classList.remove('hidden');
+                    
+                    // Process the rerun
+                    const rerunResponse = await fetch('/upload-document', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const rerunData = await rerunResponse.json();
+                    
+                    if (rerunData.status === 'success') {
+                        // Update text response
+                        document.getElementById('textResponse').innerHTML = rerunData.text_response;
+                        
+                        // Update audio player
+                        const audioPlayer = document.getElementById('audioPlayer');
+                        const audioBlob = base64ToBlob(rerunData.audio_data, 'audio/wav');
+                        const audioUrl = URL.createObjectURL(audioBlob);
+                        updateAudioPlayer(audioUrl);
+                        
+                        // Maintain the current selection when reloading history
+                        const currentSelectedId = selectedEntryId;
+                        await loadHistory();
+                        selectedEntryId = currentSelectedId;
+                        
+                        // Scroll to results
+                        document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+                    } else {
+                        alert('Error: ' + rerunData.message);
+                    }
+                } else {
+                    alert('Error: Could not retrieve entry text');
+                }
+            } catch (error) {
+                alert('Error processing rerun: ' + error);
+            } finally {
+                document.getElementById('loading').classList.add('hidden');
+                // Reset rerun button state
+                const rerunButton = document.getElementById('rerunButton');
+                rerunButton.disabled = false;
+                rerunButton.textContent = 'Rerun Selected with Current Settings';
+            }
+        }
+
+        // Load history when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadHistory();
+            
+            // Add click handler for rerun button
+            document.getElementById('rerunButton').onclick = (e) => {
+                if (selectedEntryId && !e.target.disabled) {  // Check if button is not disabled
+                    rerunEntry(selectedEntryId, e);
+                }
+            };
+        });
+
+        // Reload history after generating new audio
+        async function generateAudio() {
+            const fileInput = document.getElementById('file-upload');
+            const loading = document.getElementById('loading');
+            const audioPlayer = document.getElementById('audioPlayer');
+            const textResponse = document.getElementById('textResponse');
+
+            if (!fileInput.files.length) {
+                alert('Please select a file first');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+            formData.append('summary_length', document.getElementById('summary_length').value);
+            formData.append('language', document.getElementById('language').value);
+            formData.append('goal', document.getElementById('goal').value);
+            formData.append('voice', document.getElementById('voice').value);
+
+            const goal = document.getElementById('goal').value;
+            if (goal === 'podcast') {
+                formData.append('voice1_style', document.getElementById('voice1_style').value);
+                formData.append('voice2_style', document.getElementById('voice2_style').value);
+            } else {
+                formData.append('tone', document.getElementById('tone').value);
+            }
+
+            if (goal === 'custom') {
+                formData.append('goal_instruction', document.getElementById('goal_instruction').value);
+            }
+
+            formData.append('processing_method', document.querySelector('input[name="processing_method"]:checked').value);
+
+            loading.classList.remove('hidden');
+            // Don't hide results, just show loading overlay
+            
+            try {
+                const response = await fetch('/upload-document', {
+                    method: 'POST',
+                    body: formData
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'success') {
+                    // Update text response
+                    textResponse.innerHTML = data.text_response;
+
+                    // Update audio player
+                    const audioBlob = base64ToBlob(data.audio_data, 'audio/wav');
+                    const audioUrl = URL.createObjectURL(audioBlob);
+                    updateAudioPlayer(audioUrl);
+
+                    // Reload history
+                    loadHistory();
+                } else {
+                    alert('Error: ' + data.message);
+                }
+            } catch (error) {
+                alert('Error processing document: ' + error);
+            } finally {
+                loading.classList.add('hidden');
+            }
+        }
+
+        function base64ToBlob(base64, type) {
+            const binaryString = window.atob(base64);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return new Blob([bytes], { type: type });
+        }
+
+        // Add event listener for audio source changes
+        document.getElementById('audioPlayer').addEventListener('loadeddata', function() {
+            document.getElementById('audioPlaceholder').style.display = 'none';
+        });
+
+        function updateAudioPlayer(audioUrl) {
+            const audioPlayer = document.getElementById('audioPlayer');
+            const placeholder = document.getElementById('audioPlaceholder');
+            audioPlayer.src = audioUrl;
+            if (audioUrl) {
+                placeholder.style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html> 
