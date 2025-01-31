@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y \
     ffmpeg \
     libsndfile1 \
     postgresql-client \
+    dos2unix \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -35,7 +36,7 @@ EXPOSE 5001
 
 # Add wait-for-it script to wait for database
 COPY wait-for-it.sh /wait-for-it.sh
-RUN chmod +x /wait-for-it.sh
+RUN dos2unix /wait-for-it.sh && chmod +x /wait-for-it.sh
 
 # Command to run the application
 CMD ["/wait-for-it.sh", "db:5432", "--", "python", "-m", "flask", "run", "--host=0.0.0.0", "--port=5001"] 
